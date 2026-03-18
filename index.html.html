@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<title>AR Lab Video System</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,sans-serif;background:#f2f1ed;color:#111;}
+
+/* ── GENERATOR ── */
+#gen{padding:2rem 1rem 4rem;min-height:100vh;}
+.hdr{max-width:580px;margin:0 auto 2rem;}
+.hdr h1{font-size:21px;font-weight:700;margin-bottom:4px;}
+.hdr p{font-size:13px;color:#666;}
+.card{max-width:580px;margin:0 auto 1.2rem;background:#fff;border:1px solid #ddd;border-radius:13px;padding:1.4rem;}
+.clabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:1rem;}
+.drop{border:2px dashed #ccc;border-radius:10px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:.15s;position:relative;}
+.drop:hover,.drop.over{border-color:#1a5c3a;background:#f0f7f3;}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.drop-icon{font-size:30px;margin-bottom:8px;}
+.drop h3{font-size:14px;font-weight:600;margin-bottom:3px;}
+.drop p{font-size:12px;color:#888;}
+.chosen{font-size:12px;color:#1a5c3a;font-weight:500;margin-top:8px;display:none;}
+#vpreview{display:none;width:100%;border-radius:8px;margin-top:12px;max-height:180px;object-fit:contain;background:#000;}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field{margin-bottom:12px;}.field:last-child{margin-bottom:0;}
+.field label{display:block;font-size:12px;color:#666;margin-bottom:4px;}
+.field input{width:100%;padding:9px 11px;border:1px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;background:#fafafa;outline:none;}
+.field input:focus{border-color:#1a5c3a;background:#fff;}
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border-radius:8px;padding:9px 15px;border:1px solid #ccc;background:#fff;color:#111;transition:.12s;}
+.btn:hover{background:#f0f0ec;}
+.btn-g{background:#1a5c3a;color:#fff;border-color:#1a5c3a;width:100%;justify-content:center;font-size:14px;padding:12px;margin-top:4px;}
+.btn-g:hover{background:#13452c;}
+.btn-g:disabled{background:#aaa;border-color:#aaa;cursor:not-allowed;}
+.btn-sm{font-size:12px;padding:7px 12px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+#resultCard{display:none;}
+.rrow{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;}
+#qrCanvas{border:1px solid #ddd;border-radius:10px;display:block;}
+.qrnote{font-size:11px;color:#888;text-align:center;margin-top:5px;}
+.rmeta{flex:1;min-width:180px;}
+.rmeta h2{font-size:15px;font-weight:600;margin-bottom:2px;}
+.rtag{font-size:12px;color:#666;margin-bottom:12px;}
+.linkbox{background:#f5f5f0;border:1px solid #ddd;border-radius:8px;padding:9px 11px;margin-bottom:10px;}
+.linkbox .ll{font-size:11px;color:#888;margin-bottom:2px;}
+.linkbox .lv{font-size:11px;font-family:monospace;word-break:break-all;color:#1a5c3a;}
+.steps{max-width:580px;margin:0 auto;background:#eaf4ef;border:1px solid #b5dac5;border-radius:13px;padding:1.2rem 1.4rem;}
+.steps .clabel{color:#1a5c3a;}
+.steps ol{padding-left:1.1rem;font-size:13px;color:#2a5040;line-height:2.2;}
+.err{font-size:13px;color:#c0392b;margin-top:8px;display:none;}
+
+/* ── AR VIEWER ── */
+#viewer{
+  position:fixed;inset:0;background:#000;
+  display:none;overflow:hidden;
+}
+
+/* Layer 1: camera feed */
+#cam{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  z-index:1;
+}
+
+/* Layer 2: composited AR output */
+#arCanvas{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  z-index:2;
+}
+
+/* Hidden elements for processing */
+#arVid{position:absolute;visibility:hidden;width:1px;height:1px;}
+#segCanvas{position:absolute;visibility:hidden;width:1px;height:1px;}
+
+/* HUD */
+#hud{
+  position:absolute;top:16px;left:16px;right:16px;
+  z-index:10;display:flex;justify-content:space-between;align-items:center;
+}
+.hud-pill{
+  background:rgba(0,0,0,0.45);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:20px;
+  padding:6px 14px;font-size:11px;color:rgba(255,255,255,0.85);
+  display:flex;align-items:center;gap:7px;
+}
+.hud-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;animation:blink 1.8s infinite;flex-shrink:0;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hud-exit{
+  background:rgba(0,0,0,0.45);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:20px;
+  padding:6px 16px;font-size:11px;color:rgba(255,255,255,0.85);
+  cursor:pointer;font-family:inherit;border-style:solid;
+}
+
+/* Bottom controls */
+#controls{
+  position:absolute;bottom:28px;left:0;right:0;
+  display:flex;justify-content:center;gap:12px;
+  z-index:10;
+}
+.ctrl{
+  background:rgba(0,0,0,0.45);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:30px;
+  padding:10px 20px;font-size:12px;color:#fff;
+  cursor:pointer;font-family:inherit;border-style:solid;
+}
+.ctrl:active{background:rgba(255,255,255,0.2);}
+
+/* Sensitivity slider */
+#sensitivityBar{
+  position:absolute;bottom:80px;left:50%;transform:translateX(-50%);
+  z-index:10;
+  background:rgba(0,0,0,0.45);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:16px;
+  padding:8px 16px;display:flex;align-items:center;gap:10px;
+  font-size:11px;color:rgba(255,255,255,0.7);
+}
+#sensitivityBar input{width:100px;accent-color:#4ade80;}
+
+/* Loading overlay */
+#loadingOverlay{
+  position:absolute;inset:0;z-index:15;
+  background:rgba(0,0,0,0.88);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;color:#fff;text-align:center;padding:2rem;
+}
+#loadingOverlay h2{font-size:17px;font-weight:600;}
+#loadingOverlay p{font-size:13px;color:rgba(255,255,255,0.55);max-width:280px;line-height:1.7;}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.15);border-top-color:#4ade80;border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadingOverlay button{background:#1a5c3a;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:14px;font-family:inherit;cursor:pointer;margin-top:4px;}
+</style>
+</head>
+<body>
+
+<!-- ═══ GENERATOR SCREEN ═══ -->
+<div id="gen">
+  <div class="hdr">
+    <h1>AR Lab Video Generator</h1>
+    <p>Upload your lab video → background is removed automatically → subject appears merged into the real world through the student's camera</p>
+  </div>
+
+  <div class="card">
+    <div class="clabel">1 · Upload lab video</div>
+    <div class="drop" id="dropZone">
+      <input type="file" id="fileInput" accept="video/*" onchange="handleFile(this.files[0])"/>
+      <div class="drop-icon">🎬</div>
+      <h3>Click or drag a video here</h3>
+      <p>MP4, WebM, MOV &nbsp;·&nbsp; Works best with a person or experiment on screen</p>
+      <div class="chosen" id="chosenName"></div>
+    </div>
+    <video id="vpreview" controls></video>
+  </div>
+
+  <div class="card">
+    <div class="clabel">2 · Label</div>
+    <div class="row">
+      <div class="field">
+        <label>Experiment name</label>
+        <input type="text" id="labName" placeholder="Experiment 23 – Acids and pH"/>
+      </div>
+      <div class="field">
+        <label>Course</label>
+        <input type="text" id="courseName" placeholder="Chemistry 128"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="clabel">3 · Generate</div>
+    <button class="btn btn-g" id="genBtn" onclick="generate()" disabled>Upload a video first</button>
+    <div class="err" id="errMsg"></div>
+  </div>
+
+  <div class="card" id="resultCard">
+    <div class="clabel">QR code &amp; link</div>
+    <div class="rrow">
+      <div>
+        <canvas id="qrCanvas" width="180" height="180"></canvas>
+        <div class="qrnote">students scan this</div>
+      </div>
+      <div class="rmeta">
+        <h2 id="rTitle">—</h2>
+        <div class="rtag" id="rCourse"></div>
+        <div class="linkbox">
+          <div class="ll">Shareable link</div>
+          <div class="lv" id="rLink">—</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-sm" onclick="copyLink()">Copy link</button>
+          <button class="btn btn-sm" onclick="downloadQR()">Download QR</button>
+          <button class="btn btn-sm" onclick="launchViewer()">▶ Launch AR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps" id="stepsBox" style="display:none;">
+    <div class="clabel">How students use it</div>
+    <ol>
+      <li>Student scans QR or opens the link on their phone</li>
+      <li>Tap <strong>Allow camera</strong> — the phone camera turns on</li>
+      <li>The AI removes the video background — only the subject remains</li>
+      <li>The subject appears floating in the real lab environment</li>
+      <li>Use the <strong>Edge</strong> slider to fine-tune the background removal</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ═══ AR VIEWER SCREEN ═══ -->
+<div id="viewer">
+  <!-- Camera background -->
+  <video id="cam" autoplay playsinline muted></video>
+
+  <!-- AR composited output -->
+  <canvas id="arCanvas"></canvas>
+
+  <!-- Hidden video source for processing -->
+  <video id="arVid" playsinline loop crossorigin="anonymous"></video>
+  <canvas id="segCanvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-pill">
+      <div class="hud-dot"></div>
+      <span id="hudTitle">AR Lab Video</span>
+    </div>
+    <button class="hud-exit" onclick="exitViewer()">✕ Exit</button>
+  </div>
+
+  <!-- Sensitivity -->
+  <div id="sensitivityBar">
+    <span>Edge</span>
+    <input type="range" id="threshold" min="0.1" max="0.95" step="0.05" value="0.5"/>
+    <span>Sharp</span>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="ctrl" onclick="togglePlay()" id="playBtn">⏸ Pause</button>
+    <button class="ctrl" onclick="toggleMirror()" id="mirrorBtn">↔ Mirror</button>
+    <button class="ctrl" onclick="cycleSize()" id="sizeBtn">⤢ Size</button>
+  </div>
+
+  <!-- Loading / permission -->
+  <div id="loadingOverlay">
+    <h2>Starting AR</h2>
+    <p>Loading background removal AI and camera...</p>
+    <div class="spinner"></div>
+    <button onclick="initAR()">Allow camera &amp; start AR</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+let videoBlobURL = null;
+let viewerReady = false;
+let playing = false;
+let rafId = null;
+let segmenter = null;
+let mirrorMode = false;
+let sizeMode = 0; // 0=fill, 1=fit, 2=left, 3=right
+const sizes = ['fill','fit','left','right'];
+const sizeLabels = ['⤢ Fill','⤡ Fit','◧ Left','◨ Right'];
+
+// ══════════════════════════════════════
+//  GENERATOR
+// ══════════════════════════════════════
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith('video/')) { showErr('Please choose a video file.'); return; }
+  if (videoBlobURL) URL.revokeObjectURL(videoBlobURL);
+  videoBlobURL = URL.createObjectURL(file);
+  const p = document.getElementById('vpreview');
+  p.src = videoBlobURL; p.style.display = 'block';
+  document.getElementById('chosenName').textContent = '✓ ' + file.name;
+  document.getElementById('chosenName').style.display = 'block';
+  const btn = document.getElementById('genBtn');
+  btn.disabled = false; btn.textContent = 'Generate QR code & link';
+  hideErr();
+}
+
+function generate() {
+  if (!videoBlobURL) { showErr('Upload a video first.'); return; }
+  hideErr();
+  const label = document.getElementById('labName').value.trim() || 'Lab Video';
+  const course = document.getElementById('courseName').value.trim() || '';
+  const shareUrl = window.location.href.split('#')[0] + '#ar';
+
+  document.getElementById('rTitle').textContent = label;
+  document.getElementById('rCourse').textContent = course;
+  document.getElementById('rLink').textContent = shareUrl;
+  document.getElementById('hudTitle').textContent = label + (course ? ' · ' + course : '');
+
+  const canvas = document.getElementById('qrCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,180,180);
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+  document.body.appendChild(tmp);
+  new QRCode(tmp, { text: shareUrl, width:180, height:180, correctLevel: QRCode.CorrectLevel.M });
+  setTimeout(() => {
+    const src = tmp.querySelector('canvas') || tmp.querySelector('img');
+    if (src) ctx.drawImage(src,0,0,180,180);
+    document.body.removeChild(tmp);
+  }, 500);
+
+  document.getElementById('resultCard').style.display = 'block';
+  document.getElementById('stepsBox').style.display = 'block';
+  document.getElementById('resultCard').scrollIntoView({ behavior:'smooth' });
+  viewerReady = true;
+}
+
+function copyLink() {
+  const l = document.getElementById('rLink').textContent;
+  navigator.clipboard.writeText(l).then(()=>alert('Link copied!')).catch(()=>prompt('Copy this link:',l));
+}
+function downloadQR() {
+  const a = document.createElement('a');
+  a.download = 'ar-lab-qr.png';
+  a.href = document.getElementById('qrCanvas').toDataURL('image/png');
+  a.click();
+}
+function launchViewer() {
+  if (!viewerReady || !videoBlobURL) return;
+  window.location.hash = 'ar';
+  showViewer();
+}
+
+// ══════════════════════════════════════
+//  AR VIEWER
+// ══════════════════════════════════════
+function showViewer() {
+  document.getElementById('gen').style.display = 'none';
+  document.getElementById('viewer').style.display = 'block';
+  // Set video src
+  const av = document.getElementById('arVid');
+  av.src = videoBlobURL;
+}
+
+async function initAR() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.querySelector('button').style.display = 'none';
+  overlay.querySelector('h2').textContent = 'Starting camera...';
+
+  const camEl = document.getElementById('cam');
+  const arCanvas = document.getElementById('arCanvas');
+  const arVid = document.getElementById('arVid');
+  const segCanvas = document.getElementById('segCanvas');
+
+  // Resize canvases
+  function resize() {
+    arCanvas.width = window.innerWidth;
+    arCanvas.height = window.innerHeight;
+    segCanvas.width = window.innerWidth;
+    segCanvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Start camera
+  let camStream;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+    camEl.srcObject = camStream;
+    await camEl.play();
+  } catch(e) {
+    overlay.querySelector('h2').textContent = 'Camera unavailable';
+    overlay.querySelector('p').textContent = 'Playing video without camera background.';
+    overlay.querySelector('button').textContent = 'Play anyway';
+    overlay.querySelector('button').style.display = 'block';
+    overlay.querySelector('button').onclick = playWithoutCamera;
+    return;
+  }
+
+  overlay.querySelector('h2').textContent = 'Loading AI...';
+  overlay.querySelector('p').textContent = 'Setting up background removal (first load may take a moment)';
+
+  // Load MediaPipe Selfie Segmentation via CDN
+  try {
+    await loadMediaPipe();
+    overlay.style.display = 'none';
+    await arVid.play();
+    playing = true;
+    startRenderLoop(arCanvas, arVid, segCanvas);
+  } catch(e) {
+    console.warn('MediaPipe failed, falling back to chroma key approach:', e);
+    overlay.style.display = 'none';
+    await arVid.play();
+    playing = true;
+    startFallbackRender(arCanvas, arVid);
+  }
+}
+
+// ── Load MediaPipe ──
+function loadMediaPipe() {
+  return new Promise((resolve, reject) => {
+    if (window.SelfieSegmentation) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1/selfie_segmentation.js';
+    s.onload = () => {
+      segmenter = new SelfieSegmentation({ locateFile: f =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1/${f}`
+      });
+      segmenter.setOptions({ modelSelection: 1, selfieMode: false });
+      segmenter.onResults(onSegResults);
+      segmenter.initialize().then(resolve).catch(reject);
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// ── Segmentation render loop ──
+let lastSegMask = null;
+const arCtxRef = { ctx: null };
+
+function onSegResults(results) {
+  lastSegMask = results.segmentationMask;
+}
+
+function startRenderLoop(arCanvas, arVid, segCanvas) {
+  const ctx = arCanvas.getContext('2d');
+  const segCtx = segCanvas.getContext('2d');
+  arCtxRef.ctx = ctx;
+
+  async function frame() {
+    if (!playing) { rafId = requestAnimationFrame(frame); return; }
+
+    const W = arCanvas.width, H = arCanvas.height;
+    const threshold = parseFloat(document.getElementById('threshold').value);
+
+    // Send current video frame to segmenter
+    if (arVid.readyState >= 2 && segmenter) {
+      try {
+        await segmenter.send({ image: arVid });
+      } catch(e) {}
+    }
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (arVid.readyState >= 2 && lastSegMask) {
+      // Draw video frame to offscreen segCanvas
+      segCanvas.width = arVid.videoWidth || W;
+      segCanvas.height = arVid.videoHeight || H;
+      segCtx.drawImage(arVid, 0, 0, segCanvas.width, segCanvas.height);
+
+      // Get video pixel data
+      const vidData = segCtx.getImageData(0, 0, segCanvas.width, segCanvas.height);
+
+      // Draw mask to get alpha values
+      segCtx.drawImage(lastSegMask, 0, 0, segCanvas.width, segCanvas.height);
+      const maskData = segCtx.getImageData(0, 0, segCanvas.width, segCanvas.height);
+
+      // Composite: keep video pixel where mask says foreground
+      for (let i = 0; i < maskData.data.length; i += 4) {
+        const maskAlpha = maskData.data[i] / 255; // white=foreground, black=background
+        if (maskAlpha < threshold) {
+          vidData.data[i+3] = 0; // transparent
+        } else {
+          // Soft edge
+          const edge = Math.min(1, (maskAlpha - threshold) / 0.15);
+          vidData.data[i+3] = Math.round(edge * 255);
+        }
+      }
+
+      // Put composited frame onto arCanvas at correct size/position
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = segCanvas.width;
+      tempCanvas.height = segCanvas.height;
+      tempCanvas.getContext('2d').putImageData(vidData, 0, 0);
+
+      drawPositioned(ctx, tempCanvas, W, H, mirrorMode, sizeMode);
+    }
+
+    rafId = requestAnimationFrame(frame);
+  }
+
+  rafId = requestAnimationFrame(frame);
+}
+
+// ── Fallback: color-range removal (no AI) ──
+// Removes near-black, near-white, or green pixels
+function startFallbackRender(arCanvas, arVid) {
+  const ctx = arCanvas.getContext('2d');
+  const offscreen = document.createElement('canvas');
+  const offCtx = offscreen.getContext('2d');
+
+  function frame() {
+    const W = arCanvas.width, H = arCanvas.height;
+    if (!playing || arVid.readyState < 2) { rafId = requestAnimationFrame(frame); return; }
+
+    offscreen.width = arVid.videoWidth || W;
+    offscreen.height = arVid.videoHeight || H;
+    offCtx.drawImage(arVid, 0, 0, offscreen.width, offscreen.height);
+
+    const imgData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+    const d = imgData.data;
+    const threshold = parseFloat(document.getElementById('threshold').value);
+    const darkT = Math.round(threshold * 80);
+    const lightT = Math.round(255 - threshold * 60);
+
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i+1], b = d[i+2];
+      // Remove dark backgrounds
+      const brightness = (r + g + b) / 3;
+      // Green screen
+      const isGreen = g > 80 && g > r * 1.4 && g > b * 1.4;
+      // Very dark
+      const isDark = brightness < darkT;
+      // Very light/white
+      const isLight = brightness > lightT && Math.max(r,g,b) - Math.min(r,g,b) < 30;
+
+      if (isDark || isGreen || isLight) {
+        d[i+3] = 0;
+      } else if (brightness < darkT + 20) {
+        d[i+3] = Math.round(((brightness - darkT) / 20) * 255);
+      }
+    }
+
+    offCtx.putImageData(imgData, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    drawPositioned(ctx, offscreen, W, H, mirrorMode, sizeMode);
+    rafId = requestAnimationFrame(frame);
+  }
+
+  rafId = requestAnimationFrame(frame);
+}
+
+function drawPositioned(ctx, src, W, H, mirror, mode) {
+  const sw = src.width || src.videoWidth || W;
+  const sh = src.height || src.videoHeight || H;
+
+  ctx.save();
+  if (mirror) {
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+  }
+
+  if (mode === 0) { // fill
+    ctx.drawImage(src, 0, 0, W, H);
+  } else if (mode === 1) { // fit
+    const scale = Math.min(W/sw, H/sh);
+    const dw = sw*scale, dh = sh*scale;
+    ctx.drawImage(src, (W-dw)/2, (H-dh)/2, dw, dh);
+  } else if (mode === 2) { // left half
+    const scale = H/sh;
+    const dw = sw*scale, dh = H;
+    ctx.drawImage(src, 0, 0, dw, dh);
+  } else { // right half
+    const scale = H/sh;
+    const dw = sw*scale, dh = H;
+    ctx.drawImage(src, W-dw, 0, dw, dh);
+  }
+  ctx.restore();
+}
+
+function playWithoutCamera() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  const arVid = document.getElementById('arVid');
+  const arCanvas = document.getElementById('arCanvas');
+  arVid.play().then(() => {
+    playing = true;
+    startFallbackRender(arCanvas, arVid);
+  });
+}
+
+// ── Controls ──
+function togglePlay() {
+  const av = document.getElementById('arVid');
+  if (playing) { av.pause(); playing = false; document.getElementById('playBtn').textContent = '▶ Play'; }
+  else { av.play(); playing = true; document.getElementById('playBtn').textContent = '⏸ Pause'; }
+}
+
+function toggleMirror() {
+  mirrorMode = !mirrorMode;
+  document.getElementById('mirrorBtn').textContent = mirrorMode ? '↔ Unmirror' : '↔ Mirror';
+}
+
+function cycleSize() {
+  sizeMode = (sizeMode + 1) % 4;
+  document.getElementById('sizeBtn').textContent = sizeLabels[sizeMode];
+}
+
+function exitViewer() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  const cam = document.getElementById('cam');
+  if (cam.srcObject) { cam.srcObject.getTracks().forEach(t => t.stop()); cam.srcObject = null; }
+  const av = document.getElementById('arVid');
+  av.pause(); av.src = ''; playing = false;
+  document.getElementById('viewer').style.display = 'none';
+  document.getElementById('gen').style.display = 'block';
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('loadingOverlay').querySelector('h2').textContent = 'Starting AR';
+  document.getElementById('loadingOverlay').querySelector('p').textContent = 'Loading background removal AI and camera...';
+  const btn = document.getElementById('loadingOverlay').querySelector('button');
+  btn.textContent = 'Allow camera & start AR';
+  btn.onclick = initAR;
+  btn.style.display = 'block';
+  window.location.hash = '';
+}
+
+// ── Routing ──
+window.addEventListener('hashchange', () => {
+  if (window.location.hash === '#ar' && viewerReady && videoBlobURL) showViewer();
+});
+if (window.location.hash === '#ar' && viewerReady && videoBlobURL) showViewer();
+
+function showErr(m) { const e=document.getElementById('errMsg'); e.textContent=m; e.style.display='block'; }
+function hideErr() { document.getElementById('errMsg').style.display='none'; }
+</script>
+</body>
+</html>
